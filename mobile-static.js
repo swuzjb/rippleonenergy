@@ -235,7 +235,13 @@ function initNativeVideoCarousel(onChange) {
   });
 
   function render() {
-    wrapper.style.transform = `translateX(${-active * carousel.clientWidth}px)`;
+    const activeSlide = slides[active];
+    if (activeSlide && window.matchMedia("(min-width: 768px)").matches) {
+      const offset = carousel.clientWidth / 2 - (activeSlide.offsetLeft + activeSlide.offsetWidth / 2);
+      wrapper.style.transform = `translateX(${offset}px)`;
+    } else {
+      wrapper.style.transform = `translateX(${-active * carousel.clientWidth}px)`;
+    }
     bullets.forEach((bullet, index) => {
       bullet.classList.toggle("swiper-pagination-bullet-active", index === active);
     });
@@ -246,6 +252,10 @@ function initNativeVideoCarousel(onChange) {
   window.addEventListener("resize", render);
 
   return {
+    prev() {
+      active = (active - 1 + slides.length) % slides.length;
+      render();
+    },
     next() {
       active = (active + 1) % slides.length;
       render();
@@ -255,6 +265,85 @@ function initNativeVideoCarousel(onChange) {
       render();
     }
   };
+}
+
+function initDesktopYoutubeCardCarousel(onChange) {
+  const carousel = document.querySelector(".youtube-swiper");
+  if (!carousel) return;
+
+  const slides = [...carousel.querySelectorAll(".swiper-slide")];
+  if (slides.length === 0) return;
+
+  carousel.classList.add("is-card-carousel");
+  let active = 0;
+
+  function render() {
+    const visibleSlots = [
+      { index: (active - 1 + slides.length) % slides.length, slot: "prev" },
+      { index: active, slot: "active" },
+      { index: (active + 1) % slides.length, slot: "next" }
+    ];
+
+    slides.forEach((slide, index) => {
+      const visible = visibleSlots.find((item) => item.index === index);
+      slide.dataset.cardSlot = visible?.slot || "hidden";
+      slide.classList.toggle("is-active", visible?.slot === "active");
+      slide.classList.toggle("is-prev", visible?.slot === "prev");
+      slide.classList.toggle("is-next", visible?.slot === "next");
+      slide.classList.toggle("is-hidden", !visible);
+    });
+
+    onChange?.(active);
+  }
+
+  render();
+
+  return {
+    prev() {
+      active = (active - 1 + slides.length) % slides.length;
+      render();
+    },
+    next() {
+      active = (active + 1) % slides.length;
+      render();
+    },
+    goTo(index) {
+      active = (index + slides.length) % slides.length;
+      render();
+    },
+    getActive() {
+      return active;
+    }
+  };
+}
+
+function initYoutubeNavControls() {
+  const prev = document.querySelector(".youtube-prev");
+  const next = document.querySelector(".youtube-next");
+
+  prev?.addEventListener("click", () => {
+    if (youtubeSwiper) {
+      if (youtubeSwiper.isBeginning) {
+        youtubeSwiper.slideTo(youtubeSwiper.slides.length - 1);
+      } else {
+        youtubeSwiper.slidePrev();
+      }
+      return;
+    }
+    nativeVideoCarousel?.prev?.();
+  });
+
+  next?.addEventListener("click", () => {
+    if (youtubeSwiper) {
+      if (youtubeSwiper.isEnd) {
+        youtubeSwiper.slideTo(0);
+      } else {
+        youtubeSwiper.slideNext();
+      }
+      return;
+    }
+    nativeVideoCarousel?.next?.();
+  });
 }
 
 let youtubeSwiper = null;
@@ -290,11 +379,12 @@ function youtubePlayerVars(index) {
 
 function playYoutubeAt(index) {
   window.clearTimeout(youtubeStartGuard);
+  const activeIndex = youtubePlayers.length ? (index + youtubePlayers.length) % youtubePlayers.length : 0;
 
   youtubePlayers.forEach((player, playerIndex) => {
     if (!player || typeof player.playVideo !== "function") return;
 
-    if (playerIndex === index) {
+    if (playerIndex === activeIndex) {
       player.mute();
       player.seekTo(0, true);
       player.playVideo();
@@ -310,6 +400,7 @@ function playYoutubeAt(index) {
 }
 
 function goToNextYoutubeVideo() {
+  if (!youtubePlayers.length) return;
   const nextIndex = (getActiveYoutubeIndex() + 1) % youtubePlayers.length;
   goToYoutubeIndex(nextIndex);
 }
@@ -328,7 +419,14 @@ function goToYoutubeIndex(index) {
 }
 
 function getActiveYoutubeIndex() {
-  if (youtubeSwiper) return youtubeSwiper.activeIndex || 0;
+  if (youtubeSwiper) {
+    const index = typeof youtubeSwiper.realIndex === "number" ? youtubeSwiper.realIndex : youtubeSwiper.activeIndex || 0;
+    return youtubePlayers.length ? index % youtubePlayers.length : index;
+  }
+
+  if (nativeVideoCarousel && typeof nativeVideoCarousel.getActive === "function") {
+    return nativeVideoCarousel.getActive();
+  }
 
   const wrapper = document.querySelector(".youtube-swiper .swiper-wrapper");
   const match = wrapper?.style.transform.match(/translateX\((-?\d+(?:\.\d+)?)px\)/);
@@ -477,21 +575,31 @@ window.__mobileStaticTest = {
   youtubePlayerVars
 };
 
-if (typeof Swiper !== "undefined") {
+if (window.matchMedia("(min-width: 768px)").matches) {
+  nativeVideoCarousel = initDesktopYoutubeCardCarousel(playYoutubeAt);
+} else if (typeof Swiper !== "undefined") {
   youtubeSwiper = new Swiper(".youtube-swiper", {
     slidesPerView: 1,
     centeredSlides: false,
     spaceBetween: 0,
     loop: false,
+    rewind: true,
     speed: 700,
     allowTouchMove: true,
     pagination: {
       el: ".swiper-pagination",
       clickable: true
     },
+    breakpoints: {
+      768: {
+        slidesPerView: "auto",
+        centeredSlides: true,
+        spaceBetween: 26
+      }
+    },
     on: {
       slideChange(swiper) {
-        playYoutubeAt(swiper.activeIndex);
+        playYoutubeAt(typeof swiper.realIndex === "number" ? swiper.realIndex : swiper.activeIndex);
       }
     }
   });
@@ -501,6 +609,7 @@ if (typeof Swiper !== "undefined") {
 
 loadYoutubeApi();
 initYoutubePointerControls();
+initYoutubeNavControls();
 
 document.querySelectorAll(".newsletter form").forEach((form) => {
   form.addEventListener("submit", (event) => event.preventDefault());
