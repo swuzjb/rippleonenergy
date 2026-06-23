@@ -1,0 +1,507 @@
+const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function showEvidenceCopy() {
+  document.querySelector(".evidence .panel-copy")?.classList.add("is-visible");
+}
+
+function initFirstScreenSnap() {
+  const secondPanel = document.querySelector(".evidence");
+  const header = document.querySelector(".site-header");
+  if (!secondPanel) return;
+
+  let touchStartY = 0;
+  let touchStartScrollY = 0;
+  let locked = false;
+  let hasStartedSnap = false;
+  let hasShownEvidenceCopy = false;
+  let evidenceVisibilityObserver = null;
+
+  function headerHeight() {
+    return header ? header.getBoundingClientRect().height : 0;
+  }
+
+  function secondTop() {
+    return Math.max(0, secondPanel.offsetTop - headerHeight());
+  }
+
+  function easeOutCubic(progress) {
+    return 1 - Math.pow(1 - progress, 3);
+  }
+
+  function revealEvidenceCopy() {
+    if (hasShownEvidenceCopy) return;
+    hasShownEvidenceCopy = true;
+    showEvidenceCopy();
+    evidenceVisibilityObserver?.disconnect();
+  }
+
+  function scrollToSecondPanel() {
+    const start = window.scrollY;
+    const target = secondTop();
+    const distance = target - start;
+    const duration = prefersReducedMotion ? 0 : 820;
+    const startTime = performance.now();
+
+    if (duration === 0 || Math.abs(distance) < 1) {
+      window.scrollTo(0, target);
+      revealEvidenceCopy();
+      locked = false;
+      hasStartedSnap = false;
+      return;
+    }
+
+    function tick(now) {
+      const progress = Math.min((now - startTime) / duration, 1);
+      const nextY = start + distance * easeOutCubic(progress);
+      window.scrollTo(0, nextY);
+
+      if (progress >= 0.88) {
+        revealEvidenceCopy();
+      }
+
+      if (progress < 1) {
+        requestAnimationFrame(tick);
+        return;
+      }
+
+      window.scrollTo(0, secondTop());
+      revealEvidenceCopy();
+      locked = false;
+      hasStartedSnap = false;
+    }
+
+    requestAnimationFrame(tick);
+  }
+
+  function isInFirstScreenZone(startY) {
+    return startY < Math.min(140, secondTop() * 0.22);
+  }
+
+  function snapToSecond() {
+    if (locked) return;
+
+    locked = true;
+    hasStartedSnap = true;
+    scrollToSecondPanel();
+  }
+
+  evidenceVisibilityObserver = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting || locked || entry.intersectionRatio < 0.72) return;
+        revealEvidenceCopy();
+      });
+    },
+    { threshold: [0.72] }
+  );
+
+  evidenceVisibilityObserver.observe(secondPanel);
+
+  function maybeSnapDown(deltaY, startY, event) {
+    if (locked) {
+      event.preventDefault();
+      return;
+    }
+
+    if (deltaY > 12 && isInFirstScreenZone(startY)) {
+      event.preventDefault();
+      snapToSecond();
+    }
+  }
+
+  window.addEventListener(
+    "wheel",
+    (event) => {
+      maybeSnapDown(event.deltaY, window.scrollY, event);
+    },
+    { passive: false }
+  );
+
+  window.addEventListener(
+    "touchstart",
+    (event) => {
+      touchStartY = event.touches[0]?.clientY || 0;
+      touchStartScrollY = window.scrollY;
+    },
+    { passive: true }
+  );
+
+  window.addEventListener(
+    "touchmove",
+    (event) => {
+      const currentY = event.touches[0]?.clientY || touchStartY;
+      const deltaY = touchStartY - currentY;
+
+      if (locked) {
+        event.preventDefault();
+        return;
+      }
+
+      if (hasStartedSnap || Math.abs(deltaY) < 10) return;
+      maybeSnapDown(deltaY, touchStartScrollY, event);
+    },
+    { passive: false }
+  );
+}
+
+initFirstScreenSnap();
+
+const revealObserver = new IntersectionObserver(
+  (entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add("is-visible");
+        revealObserver.unobserve(entry.target);
+      }
+    });
+  },
+  { threshold: 0.28 }
+);
+
+document.querySelectorAll(".from-left, .reveal").forEach((element) => {
+  if (element.closest(".evidence")) return;
+  revealObserver.observe(element);
+});
+
+function formatNumber(value, format = "comma") {
+  const formatted = new Intl.NumberFormat("en-US").format(value);
+  return format === "dot" ? formatted.replaceAll(",", ".") : formatted;
+}
+
+function animateCount(element) {
+  if (element.dataset.done === "true") return;
+  element.dataset.done = "true";
+
+  const target = Number(element.dataset.target || 0);
+  const format = element.dataset.format || "comma";
+  if (prefersReducedMotion || target <= 3) {
+    element.textContent = formatNumber(target, format);
+    return;
+  }
+
+  const duration = target > 100000 ? 2200 : 1500;
+  const startTime = performance.now();
+
+  function tick(now) {
+    const progress = Math.min((now - startTime) / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    element.textContent = formatNumber(Math.round(target * eased), format);
+
+    if (progress < 1) {
+      requestAnimationFrame(tick);
+    }
+  }
+
+  requestAnimationFrame(tick);
+}
+
+const countObserver = new IntersectionObserver(
+  (entries) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) return;
+      animateCount(entry.target);
+      countObserver.unobserve(entry.target);
+    });
+  },
+  { threshold: 0.55 }
+);
+
+document.querySelectorAll(".count").forEach((element) => {
+  countObserver.observe(element);
+});
+
+function initNativeVideoCarousel(onChange) {
+  const carousel = document.querySelector(".youtube-swiper");
+  if (!carousel) return;
+
+  const wrapper = carousel.querySelector(".swiper-wrapper");
+  const slides = [...carousel.querySelectorAll(".swiper-slide")];
+  const pagination = carousel.querySelector(".swiper-pagination");
+  if (!wrapper || slides.length === 0) return;
+
+  carousel.classList.add("is-native");
+  let active = 0;
+  const bullets = slides.map((_, index) => {
+    const bullet = document.createElement("button");
+    bullet.type = "button";
+    bullet.className = "swiper-pagination-bullet";
+    bullet.setAttribute("aria-label", `Go to video ${index + 1}`);
+    bullet.addEventListener("click", () => {
+      active = index;
+      render();
+    });
+    pagination?.appendChild(bullet);
+    return bullet;
+  });
+
+  function render() {
+    wrapper.style.transform = `translateX(${-active * carousel.clientWidth}px)`;
+    bullets.forEach((bullet, index) => {
+      bullet.classList.toggle("swiper-pagination-bullet-active", index === active);
+    });
+    onChange?.(active);
+  }
+
+  render();
+  window.addEventListener("resize", render);
+
+  return {
+    next() {
+      active = (active + 1) % slides.length;
+      render();
+    },
+    goTo(index) {
+      active = index % slides.length;
+      render();
+    }
+  };
+}
+
+let youtubeSwiper = null;
+let nativeVideoCarousel = null;
+const youtubePlayers = [];
+let youtubeStartGuard = null;
+
+function youtubeOrigin() {
+  if (window.location.protocol === "http:" || window.location.protocol === "https:") {
+    return window.location.origin;
+  }
+
+  return "";
+}
+
+function youtubePlayerVars(index) {
+  const playerVars = {
+    autoplay: index === 0 ? 1 : 0,
+    controls: 0,
+    playsinline: 1,
+    rel: 0,
+    modestbranding: 1,
+    mute: 1
+  };
+  const origin = youtubeOrigin();
+
+  if (origin) {
+    playerVars.origin = origin;
+  }
+
+  return playerVars;
+}
+
+function playYoutubeAt(index) {
+  window.clearTimeout(youtubeStartGuard);
+
+  youtubePlayers.forEach((player, playerIndex) => {
+    if (!player || typeof player.playVideo !== "function") return;
+
+    if (playerIndex === index) {
+      player.mute();
+      player.seekTo(0, true);
+      player.playVideo();
+      youtubeStartGuard = window.setTimeout(() => {
+        if (typeof player.getPlayerState === "function" && player.getPlayerState() !== YT.PlayerState.PLAYING) {
+          player.pauseVideo();
+        }
+      }, 4200);
+    } else {
+      player.pauseVideo();
+    }
+  });
+}
+
+function goToNextYoutubeVideo() {
+  const nextIndex = (getActiveYoutubeIndex() + 1) % youtubePlayers.length;
+  goToYoutubeIndex(nextIndex);
+}
+
+function goToYoutubeIndex(index) {
+  const total = youtubePlayers.length || document.querySelectorAll(".youtube-player, .youtube-section iframe").length || 1;
+  const nextIndex = (index + total) % total;
+
+  if (youtubeSwiper) {
+    youtubeSwiper.slideTo(nextIndex);
+  } else if (nativeVideoCarousel) {
+    nativeVideoCarousel.goTo(nextIndex);
+  }
+
+  window.setTimeout(() => playYoutubeAt(nextIndex), 500);
+}
+
+function getActiveYoutubeIndex() {
+  if (youtubeSwiper) return youtubeSwiper.activeIndex || 0;
+
+  const wrapper = document.querySelector(".youtube-swiper .swiper-wrapper");
+  const match = wrapper?.style.transform.match(/translateX\((-?\d+(?:\.\d+)?)px\)/);
+  const width = document.querySelector(".youtube-swiper")?.clientWidth || 1;
+  return match ? Math.abs(Math.round(Number(match[1]) / width)) : 0;
+}
+
+function initYoutubePlayers() {
+  document.querySelectorAll(".youtube-player").forEach((element, index) => {
+    const videoId = element.dataset.videoId;
+    if (!videoId) return;
+
+    youtubePlayers[index] = new YT.Player(element.id, {
+      videoId,
+      host: "https://www.youtube.com",
+      playerVars: youtubePlayerVars(index),
+      events: {
+        onReady(event) {
+          event.target.mute();
+          if (index === 0 && !prefersReducedMotion) {
+            event.target.playVideo();
+          }
+        },
+        onStateChange(event) {
+          if (event.data === YT.PlayerState.PLAYING) {
+            window.clearTimeout(youtubeStartGuard);
+          }
+
+          if (event.data === YT.PlayerState.ENDED) {
+            goToNextYoutubeVideo();
+          }
+        },
+        onError() {
+          if (index === getActiveYoutubeIndex()) {
+            goToNextYoutubeVideo();
+          }
+        }
+      }
+    });
+  });
+}
+
+window.onYouTubeIframeAPIReady = initYoutubePlayers;
+
+function loadYoutubeApi() {
+  if (window.YT?.Player) {
+    initYoutubePlayers();
+    return;
+  }
+
+  const script = document.createElement("script");
+  script.src = "https://www.youtube.com/iframe_api";
+  document.head.appendChild(script);
+}
+
+function resolveYoutubePointerGesture(start, end) {
+  const deltaX = end.x - start.x;
+  const deltaY = end.y - start.y;
+  const absX = Math.abs(deltaX);
+  const absY = Math.abs(deltaY);
+
+  if (Math.hypot(deltaX, deltaY) <= 14) return "tap";
+  if (absX >= 44 && absX > absY * 1.2) return deltaX < 0 ? "swipe-left" : "swipe-right";
+  if (absY > absX && absY >= 28) return "scroll";
+  return "none";
+}
+
+function isYoutubePlayerPlaying(player) {
+  if (!player || typeof player.getPlayerState !== "function" || !window.YT?.PlayerState) return false;
+  return player.getPlayerState() === YT.PlayerState.PLAYING;
+}
+
+function toggleActiveYoutubeVideo() {
+  const active = getActiveYoutubeIndex();
+  const player = youtubePlayers[active];
+
+  window.clearTimeout(youtubeStartGuard);
+
+  if (isYoutubePlayerPlaying(player)) {
+    player.pauseVideo();
+    return;
+  }
+
+  if (player?.playVideo) {
+    player.mute();
+    player.playVideo();
+  }
+}
+
+function initYoutubePointerControls() {
+  const layer = document.querySelector(".youtube-video-click-layer");
+  if (!layer) return;
+
+  let pointerStart = null;
+  let suppressNextClick = false;
+
+  layer.addEventListener("pointerdown", (event) => {
+    suppressNextClick = false;
+    pointerStart = {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY
+    };
+  });
+
+  layer.addEventListener("pointerup", (event) => {
+    if (!pointerStart || pointerStart.id !== event.pointerId) return;
+
+    const action = resolveYoutubePointerGesture(pointerStart, {
+      x: event.clientX,
+      y: event.clientY
+    });
+    pointerStart = null;
+
+    if (action === "swipe-left") {
+      suppressNextClick = true;
+      goToYoutubeIndex(getActiveYoutubeIndex() + 1);
+      return;
+    }
+
+    if (action === "swipe-right") {
+      suppressNextClick = true;
+      goToYoutubeIndex(getActiveYoutubeIndex() - 1);
+    }
+  });
+
+  layer.addEventListener("click", (event) => {
+    if (suppressNextClick) {
+      event.preventDefault();
+      suppressNextClick = false;
+      return;
+    }
+
+    toggleActiveYoutubeVideo();
+  });
+
+  layer.addEventListener("pointercancel", () => {
+    pointerStart = null;
+    suppressNextClick = false;
+  });
+}
+
+window.__mobileStaticTest = {
+  resolveYoutubePointerGesture,
+  formatNumber,
+  youtubePlayerVars
+};
+
+if (typeof Swiper !== "undefined") {
+  youtubeSwiper = new Swiper(".youtube-swiper", {
+    slidesPerView: 1,
+    centeredSlides: false,
+    spaceBetween: 0,
+    loop: false,
+    speed: 700,
+    allowTouchMove: true,
+    pagination: {
+      el: ".swiper-pagination",
+      clickable: true
+    },
+    on: {
+      slideChange(swiper) {
+        playYoutubeAt(swiper.activeIndex);
+      }
+    }
+  });
+} else {
+  nativeVideoCarousel = initNativeVideoCarousel(playYoutubeAt);
+}
+
+loadYoutubeApi();
+initYoutubePointerControls();
+
+document.querySelectorAll(".newsletter form").forEach((form) => {
+  form.addEventListener("submit", (event) => event.preventDefault());
+});
