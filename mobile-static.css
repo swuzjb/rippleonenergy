@@ -437,6 +437,21 @@ h2 {
   transition: transform 800ms ease, opacity 800ms ease;
 }
 
+.insight-back-video {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 0;
+  width: 100%;
+  height: 56%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.insight-back-video-desktop {
+  display: none;
+}
+
 .insight-band {
   position: absolute;
   left: 0;
@@ -1512,6 +1527,18 @@ h2 {
     overflow: hidden;
     background: #fff;
     transform: translateY(28px);
+  }
+
+  .insight-back-video {
+    height: clamp(560px, 49vw, 650px);
+  }
+
+  .insight-back-video-mobile {
+    display: none;
+  }
+
+  .insight-back-video-desktop {
+    display: block;
   }
 
   .insight-band {
