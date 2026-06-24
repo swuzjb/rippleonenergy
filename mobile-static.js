@@ -4,6 +4,10 @@ function showEvidenceCopy() {
   document.querySelector(".evidence .panel-copy")?.classList.add("is-visible");
 }
 
+function hideEvidenceCopy() {
+  document.querySelector(".evidence .panel-copy")?.classList.remove("is-visible");
+}
+
 function initFirstScreenSnap() {
   const secondPanel = document.querySelector(".evidence");
   const header = document.querySelector(".site-header");
@@ -13,8 +17,6 @@ function initFirstScreenSnap() {
   let touchStartScrollY = 0;
   let locked = false;
   let hasStartedSnap = false;
-  let hasShownEvidenceCopy = false;
-  let evidenceVisibilityObserver = null;
 
   function headerHeight() {
     return header ? header.getBoundingClientRect().height : 0;
@@ -24,22 +26,21 @@ function initFirstScreenSnap() {
     return Math.max(0, secondPanel.offsetTop - headerHeight());
   }
 
-  function easeOutCubic(progress) {
-    return 1 - Math.pow(1 - progress, 3);
+  function easeInOutCubic(progress) {
+    return progress < 0.5
+      ? 4 * progress * progress * progress
+      : 1 - Math.pow(-2 * progress + 2, 3) / 2;
   }
 
   function revealEvidenceCopy() {
-    if (hasShownEvidenceCopy) return;
-    hasShownEvidenceCopy = true;
     showEvidenceCopy();
-    evidenceVisibilityObserver?.disconnect();
   }
 
   function scrollToSecondPanel() {
     const start = window.scrollY;
     const target = secondTop();
     const distance = target - start;
-    const duration = prefersReducedMotion ? 0 : 820;
+    const duration = prefersReducedMotion ? 0 : 960;
     const startTime = performance.now();
 
     if (duration === 0 || Math.abs(distance) < 1) {
@@ -52,10 +53,10 @@ function initFirstScreenSnap() {
 
     function tick(now) {
       const progress = Math.min((now - startTime) / duration, 1);
-      const nextY = start + distance * easeOutCubic(progress);
+      const nextY = start + distance * easeInOutCubic(progress);
       window.scrollTo(0, nextY);
 
-      if (progress >= 0.88) {
+      if (progress >= 0.96) {
         revealEvidenceCopy();
       }
 
@@ -82,17 +83,25 @@ function initFirstScreenSnap() {
 
     locked = true;
     hasStartedSnap = true;
+    hideEvidenceCopy();
     scrollToSecondPanel();
   }
 
-  evidenceVisibilityObserver = new IntersectionObserver(
+  const evidenceVisibilityObserver = new IntersectionObserver(
     (entries) => {
       entries.forEach((entry) => {
-        if (!entry.isIntersecting || locked || entry.intersectionRatio < 0.72) return;
-        revealEvidenceCopy();
+        if (locked) return;
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.72) {
+          revealEvidenceCopy();
+          return;
+        }
+
+        if (!entry.isIntersecting || entry.intersectionRatio < 0.18) {
+          hideEvidenceCopy();
+        }
       });
     },
-    { threshold: [0.72] }
+    { threshold: [0, 0.18, 0.72] }
   );
 
   evidenceVisibilityObserver.observe(secondPanel);
