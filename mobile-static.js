@@ -9,6 +9,7 @@ function hideEvidenceCopy() {
 }
 
 function initFirstScreenSnap() {
+  const hero = document.querySelector(".hero");
   const secondPanel = document.querySelector(".evidence");
   const header = document.querySelector(".site-header");
   if (!secondPanel) return;
@@ -17,6 +18,8 @@ function initFirstScreenSnap() {
   let touchStartScrollY = 0;
   let locked = false;
   let hasStartedSnap = false;
+  let isFreezingFirstScreen = false;
+  let frozenScrollY = 0;
 
   function headerHeight() {
     return header ? header.getBoundingClientRect().height : 0;
@@ -26,21 +29,100 @@ function initFirstScreenSnap() {
     return Math.max(0, secondPanel.offsetTop - headerHeight());
   }
 
-  function easeInOutCubic(progress) {
-    return progress < 0.5
-      ? 4 * progress * progress * progress
-      : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+  function easeOutQuad(progress) {
+    return 1 - (1 - progress) * (1 - progress);
   }
 
   function revealEvidenceCopy() {
     showEvidenceCopy();
   }
 
+  function preventScrollEvent(event) {
+    if (event?.cancelable !== false) {
+      event.preventDefault();
+    }
+  }
+
+  function freezeFirstScreenScroll() {
+    frozenScrollY = isInFirstScreenZone(window.scrollY) ? 0 : window.scrollY;
+    isFreezingFirstScreen = true;
+    window.scrollTo(0, frozenScrollY);
+  }
+
+  function releaseFirstScreenScroll() {
+    isFreezingFirstScreen = false;
+  }
+
+  function activeHeroVideos() {
+    const deviceClass = window.matchMedia("(min-width: 768px)").matches
+      ? ".hero-video-desktop"
+      : ".hero-video-mobile";
+
+    return {
+      before: document.querySelector(`.hero-video-before${deviceClass}`),
+      after: document.querySelector(`.hero-video-after${deviceClass}`)
+    };
+  }
+
+  function primeHeroAfterVideos() {
+    document.querySelectorAll(".hero-video-after").forEach((video) => {
+      video.load?.();
+    });
+  }
+
+  function resetHeroVideo() {
+    const { before, after } = activeHeroVideos();
+    if (!before || !after || before.dataset.state === "before") return;
+
+    before.dataset.state = "before";
+    after.classList.remove("is-active");
+    after.pause();
+    try {
+      after.currentTime = 0;
+    } catch (error) {}
+    before.play?.().catch(() => {});
+  }
+
+  function playHeroAfterVideo() {
+    const { before, after } = activeHeroVideos();
+    if (!before || !after || prefersReducedMotion) return Promise.resolve();
+
+    return new Promise((resolve) => {
+      let resolved = false;
+      let fallbackTimer = 0;
+
+      function finish() {
+        if (resolved) return;
+        resolved = true;
+        window.clearTimeout(fallbackTimer);
+        after.removeEventListener("ended", finish);
+        resolve();
+      }
+
+      before.dataset.state = "after";
+      after.loop = false;
+      after.muted = true;
+      after.playsInline = true;
+      after.addEventListener("ended", finish, { once: true });
+
+      try {
+        after.currentTime = 0;
+      } catch (error) {}
+      after.classList.add("is-active");
+      fallbackTimer = window.setTimeout(finish, 8000);
+      const playPromise = after.play?.();
+
+      if (playPromise && typeof playPromise.catch === "function") {
+        playPromise.catch(finish);
+      }
+    });
+  }
+
   function scrollToSecondPanel() {
     const start = window.scrollY;
     const target = secondTop();
     const distance = target - start;
-    const duration = prefersReducedMotion ? 0 : 960;
+    const duration = prefersReducedMotion ? 0 : 360;
     const startTime = performance.now();
 
     if (duration === 0 || Math.abs(distance) < 1) {
@@ -53,7 +135,7 @@ function initFirstScreenSnap() {
 
     function tick(now) {
       const progress = Math.min((now - startTime) / duration, 1);
-      const nextY = start + distance * easeInOutCubic(progress);
+      const nextY = start + distance * easeOutQuad(progress);
       window.scrollTo(0, nextY);
 
       if (progress >= 0.96) {
@@ -83,8 +165,29 @@ function initFirstScreenSnap() {
 
     locked = true;
     hasStartedSnap = true;
+    freezeFirstScreenScroll();
     hideEvidenceCopy();
-    scrollToSecondPanel();
+    playHeroAfterVideo().then(() => {
+      releaseFirstScreenScroll();
+      scrollToSecondPanel();
+    });
+  }
+
+  const heroResetObserver = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (locked) return;
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.72) {
+          resetHeroVideo();
+        }
+      });
+    },
+    { threshold: [0.72] }
+  );
+
+  if (hero) {
+    primeHeroAfterVideos();
+    heroResetObserver.observe(hero);
   }
 
   const evidenceVisibilityObserver = new IntersectionObserver(
@@ -108,12 +211,15 @@ function initFirstScreenSnap() {
 
   function maybeSnapDown(deltaY, startY, event) {
     if (locked) {
-      event.preventDefault();
+      preventScrollEvent(event);
+      if (isFreezingFirstScreen && window.scrollY !== frozenScrollY) {
+        window.scrollTo(0, frozenScrollY);
+      }
       return;
     }
 
-    if (deltaY > 12 && isInFirstScreenZone(startY)) {
-      event.preventDefault();
+    if (deltaY > 0 && isInFirstScreenZone(startY)) {
+      preventScrollEvent(event);
       snapToSecond();
     }
   }
@@ -142,14 +248,26 @@ function initFirstScreenSnap() {
       const deltaY = touchStartY - currentY;
 
       if (locked) {
-        event.preventDefault();
+        preventScrollEvent(event);
+        if (isFreezingFirstScreen && window.scrollY !== frozenScrollY) {
+          window.scrollTo(0, frozenScrollY);
+        }
         return;
       }
 
-      if (hasStartedSnap || Math.abs(deltaY) < 10) return;
+      if (hasStartedSnap) return;
       maybeSnapDown(deltaY, touchStartScrollY, event);
     },
     { passive: false }
+  );
+
+  window.addEventListener(
+    "scroll",
+    () => {
+      if (!isFreezingFirstScreen || window.scrollY === frozenScrollY) return;
+      window.scrollTo(0, frozenScrollY);
+    },
+    { passive: true }
   );
 }
 
@@ -178,20 +296,23 @@ function formatNumber(value, format = "comma") {
 }
 
 function animateCount(element) {
-  if (element.dataset.done === "true") return;
-  element.dataset.done = "true";
-
   const target = Number(element.dataset.target || 0);
   const format = element.dataset.format || "comma";
-  if (prefersReducedMotion || target <= 3) {
+  const animationId = String((Number(element.dataset.animationId) || 0) + 1);
+  element.dataset.animationId = animationId;
+
+  if (prefersReducedMotion) {
     element.textContent = formatNumber(target, format);
     return;
   }
 
-  const duration = target > 100000 ? 2200 : 1500;
+  const duration = target > 100000 ? 2200 : target <= 3 ? 900 : 1500;
   const startTime = performance.now();
+  element.textContent = formatNumber(0, format);
 
   function tick(now) {
+    if (element.dataset.animationId !== animationId) return;
+
     const progress = Math.min((now - startTime) / duration, 1);
     const eased = 1 - Math.pow(1 - progress, 3);
     element.textContent = formatNumber(Math.round(target * eased), format);
@@ -207,12 +328,19 @@ function animateCount(element) {
 const countObserver = new IntersectionObserver(
   (entries) => {
     entries.forEach((entry) => {
-      if (!entry.isIntersecting) return;
-      animateCount(entry.target);
-      countObserver.unobserve(entry.target);
+      const isVisible = entry.isIntersecting && entry.intersectionRatio >= 0.55;
+
+      if (isVisible) {
+        if (entry.target.dataset.countVisible === "true") return;
+        entry.target.dataset.countVisible = "true";
+        animateCount(entry.target);
+        return;
+      }
+
+      entry.target.dataset.countVisible = "false";
     });
   },
-  { threshold: 0.55 }
+  { threshold: [0, 0.55] }
 );
 
 document.querySelectorAll(".count").forEach((element) => {

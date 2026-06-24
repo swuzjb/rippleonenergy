@@ -208,6 +208,15 @@ main {
   display: none;
 }
 
+.hero-video-after {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.hero-video-after.is-active {
+  opacity: 1;
+}
+
 .evidence {
   min-height: 0;
   aspect-ratio: 0.955 / 1;
@@ -760,7 +769,8 @@ h2 {
 
 .youtube-section {
   position: relative;
-  min-height: calc(100svh - var(--header-h));
+  min-height: 0;
+  height: auto;
   padding: 0;
   background: #9c9c9b;
   color: #fff;
@@ -781,7 +791,7 @@ h2 {
   position: absolute;
   left: 24px;
   right: 24px;
-  bottom: 98px;
+  bottom: clamp(46px, 14vw, 68px);
   z-index: 4;
   margin: 0;
   color: #fff;
@@ -790,13 +800,16 @@ h2 {
 
 .youtube-heading h2 {
   max-width: min(100%, 360px);
-  font-size: clamp(28px, 8.4vw, 38px);
+  font-size: clamp(22px, 7.4vw, 34px);
   line-height: 1.1;
 }
 
 .youtube-swiper {
-  position: absolute;
-  inset: 0;
+  position: relative;
+  inset: auto;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  height: auto;
   overflow: hidden;
   padding: 0;
 }
@@ -806,7 +819,8 @@ h2 {
   top: 0;
   left: 0;
   right: 0;
-  bottom: 88px;
+  bottom: auto;
+  height: 100%;
   z-index: 6;
   padding: 0;
   border: 0;
@@ -816,7 +830,7 @@ h2 {
 
 .youtube-swiper .swiper-slide {
   width: 100%;
-  height: calc(100svh - var(--header-h));
+  height: 100%;
   flex: 0 0 100%;
   overflow: hidden;
   background: #9c9c9b;
@@ -828,21 +842,13 @@ h2 {
   position: absolute;
   top: 0 !important;
   bottom: 0 !important;
-  left: 50% !important;
-  width: 177.78vh !important;
+  left: 0 !important;
+  width: 100% !important;
   min-width: 100% !important;
   max-width: none !important;
   height: 100% !important;
   border: 0;
-  transform: translateX(-50%) !important;
-}
-
-@supports (height: 100svh) {
-  .youtube-player,
-  .youtube-swiper iframe,
-  .youtube-section iframe {
-    width: 177.78svh !important;
-  }
+  transform: none !important;
 }
 
 .youtube-swiper .swiper-slide::after {
@@ -866,7 +872,7 @@ h2 {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 42px;
+  bottom: clamp(16px, 5vw, 28px);
   z-index: 9;
   display: flex;
   justify-content: center;
@@ -1680,7 +1686,7 @@ h2 {
 
   .insight-lower-metrics {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0;
     align-items: start;
     width: 100%;
@@ -1691,17 +1697,18 @@ h2 {
     display: grid;
     justify-items: center;
     gap: 13px;
+    min-width: 0;
   }
 
   .insight-lower-metrics img {
-    width: clamp(56px, 5.7vw, 74px);
+    width: min(clamp(88px, 8.4vw, 118px), 82%);
     aspect-ratio: 1;
     border-radius: 50%;
     object-fit: cover;
   }
 
   .insight-lower-metrics span {
-    font-size: clamp(11px, 0.95vw, 14px);
+    font-size: clamp(10px, 0.82vw, 13px);
     font-weight: 700;
     line-height: 1;
     color: #2b2b2b;
