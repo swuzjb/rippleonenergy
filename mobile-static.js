@@ -20,6 +20,10 @@ function initFirstScreenSnap() {
   let hasStartedSnap = false;
   let isFreezingFirstScreen = false;
   let frozenScrollY = 0;
+  let isForcingInstantScroll = false;
+  let restoreScrollBehaviorTimer = 0;
+  let previousHtmlScrollBehavior = "";
+  let previousBodyScrollBehavior = "";
 
   function headerHeight() {
     return header ? header.getBoundingClientRect().height : 0;
@@ -27,10 +31,6 @@ function initFirstScreenSnap() {
 
   function secondTop() {
     return Math.max(0, secondPanel.offsetTop - headerHeight());
-  }
-
-  function easeOutQuad(progress) {
-    return 1 - (1 - progress) * (1 - progress);
   }
 
   function revealEvidenceCopy() {
@@ -43,10 +43,32 @@ function initFirstScreenSnap() {
     }
   }
 
+  function instantScrollTo(top) {
+    const html = document.documentElement;
+    const body = document.body;
+
+    if (!isForcingInstantScroll) {
+      isForcingInstantScroll = true;
+      previousHtmlScrollBehavior = html.style.scrollBehavior;
+      previousBodyScrollBehavior = body.style.scrollBehavior;
+    }
+
+    html.style.scrollBehavior = "auto";
+    body.style.scrollBehavior = "auto";
+    window.scrollTo({ left: 0, top, behavior: "auto" });
+
+    window.clearTimeout(restoreScrollBehaviorTimer);
+    restoreScrollBehaviorTimer = window.setTimeout(() => {
+      html.style.scrollBehavior = previousHtmlScrollBehavior;
+      body.style.scrollBehavior = previousBodyScrollBehavior;
+      isForcingInstantScroll = false;
+    }, 80);
+  }
+
   function freezeFirstScreenScroll() {
     frozenScrollY = isInFirstScreenZone(window.scrollY) ? 0 : window.scrollY;
     isFreezingFirstScreen = true;
-    window.scrollTo(0, frozenScrollY);
+    instantScrollTo(frozenScrollY);
   }
 
   function releaseFirstScreenScroll() {
@@ -119,41 +141,11 @@ function initFirstScreenSnap() {
   }
 
   function scrollToSecondPanel() {
-    const start = window.scrollY;
     const target = secondTop();
-    const distance = target - start;
-    const duration = prefersReducedMotion ? 0 : 360;
-    const startTime = performance.now();
-
-    if (duration === 0 || Math.abs(distance) < 1) {
-      window.scrollTo(0, target);
-      revealEvidenceCopy();
-      locked = false;
-      hasStartedSnap = false;
-      return;
-    }
-
-    function tick(now) {
-      const progress = Math.min((now - startTime) / duration, 1);
-      const nextY = start + distance * easeOutQuad(progress);
-      window.scrollTo(0, nextY);
-
-      if (progress >= 0.96) {
-        revealEvidenceCopy();
-      }
-
-      if (progress < 1) {
-        requestAnimationFrame(tick);
-        return;
-      }
-
-      window.scrollTo(0, secondTop());
-      revealEvidenceCopy();
-      locked = false;
-      hasStartedSnap = false;
-    }
-
-    requestAnimationFrame(tick);
+    instantScrollTo(target);
+    revealEvidenceCopy();
+    locked = false;
+    hasStartedSnap = false;
   }
 
   function isInFirstScreenZone(startY) {
@@ -213,7 +205,7 @@ function initFirstScreenSnap() {
     if (locked) {
       preventScrollEvent(event);
       if (isFreezingFirstScreen && window.scrollY !== frozenScrollY) {
-        window.scrollTo(0, frozenScrollY);
+        instantScrollTo(frozenScrollY);
       }
       return;
     }
@@ -250,7 +242,7 @@ function initFirstScreenSnap() {
       if (locked) {
         preventScrollEvent(event);
         if (isFreezingFirstScreen && window.scrollY !== frozenScrollY) {
-          window.scrollTo(0, frozenScrollY);
+          instantScrollTo(frozenScrollY);
         }
         return;
       }
@@ -265,7 +257,7 @@ function initFirstScreenSnap() {
     "scroll",
     () => {
       if (!isFreezingFirstScreen || window.scrollY === frozenScrollY) return;
-      window.scrollTo(0, frozenScrollY);
+      instantScrollTo(frozenScrollY);
     },
     { passive: true }
   );
