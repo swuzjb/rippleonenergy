@@ -261,39 +261,41 @@ function initNativeVideoCarousel(onChange) {
       render();
     },
     goTo(index) {
-      active = index % slides.length;
+      active = (index + slides.length) % slides.length;
       render();
+    },
+    getActive() {
+      return active;
     }
   };
 }
 
-function initDesktopYoutubeCardCarousel(onChange) {
+function initDesktopThreeSlotYoutubeCarousel() {
   const carousel = document.querySelector(".youtube-swiper");
   if (!carousel) return;
 
   const slides = [...carousel.querySelectorAll(".swiper-slide")];
   if (slides.length === 0) return;
 
-  carousel.classList.add("is-card-carousel");
+  carousel.classList.add("is-three-slot");
   let active = 0;
 
   function render() {
-    const visibleSlots = [
-      { index: (active - 1 + slides.length) % slides.length, slot: "prev" },
-      { index: active, slot: "active" },
-      { index: (active + 1) % slides.length, slot: "next" }
-    ];
+    const prevIndex = (active - 1 + slides.length) % slides.length;
+    const nextIndex = (active + 1) % slides.length;
 
     slides.forEach((slide, index) => {
-      const visible = visibleSlots.find((item) => item.index === index);
-      slide.dataset.cardSlot = visible?.slot || "hidden";
-      slide.classList.toggle("is-active", visible?.slot === "active");
-      slide.classList.toggle("is-prev", visible?.slot === "prev");
-      slide.classList.toggle("is-next", visible?.slot === "next");
-      slide.classList.toggle("is-hidden", !visible);
-    });
+      let slot = "hidden";
+      if (index === prevIndex) slot = "prev";
+      if (index === active) slot = "active";
+      if (index === nextIndex) slot = "next";
 
-    onChange?.(active);
+      slide.dataset.slot = slot;
+      slide.classList.toggle("is-active", slot === "active");
+      slide.classList.toggle("is-prev", slot === "prev");
+      slide.classList.toggle("is-next", slot === "next");
+      slide.classList.toggle("is-hidden", slot === "hidden");
+    });
   }
 
   render();
@@ -322,27 +324,11 @@ function initYoutubeNavControls() {
   const next = document.querySelector(".youtube-next");
 
   prev?.addEventListener("click", () => {
-    if (youtubeSwiper) {
-      if (youtubeSwiper.isBeginning) {
-        youtubeSwiper.slideTo(youtubeSwiper.slides.length - 1);
-      } else {
-        youtubeSwiper.slidePrev();
-      }
-      return;
-    }
-    nativeVideoCarousel?.prev?.();
+    goToYoutubeIndex(getActiveYoutubeIndex() - 1);
   });
 
   next?.addEventListener("click", () => {
-    if (youtubeSwiper) {
-      if (youtubeSwiper.isEnd) {
-        youtubeSwiper.slideTo(0);
-      } else {
-        youtubeSwiper.slideNext();
-      }
-      return;
-    }
-    nativeVideoCarousel?.next?.();
+    goToYoutubeIndex(getActiveYoutubeIndex() + 1);
   });
 }
 
@@ -350,6 +336,7 @@ let youtubeSwiper = null;
 let nativeVideoCarousel = null;
 const youtubePlayers = [];
 let youtubeStartGuard = null;
+let youtubePlaybackTimer = null;
 
 function youtubeOrigin() {
   if (window.location.protocol === "http:" || window.location.protocol === "https:") {
@@ -379,6 +366,7 @@ function youtubePlayerVars(index) {
 
 function playYoutubeAt(index) {
   window.clearTimeout(youtubeStartGuard);
+  window.clearTimeout(youtubePlaybackTimer);
   const activeIndex = youtubePlayers.length ? (index + youtubePlayers.length) % youtubePlayers.length : 0;
 
   youtubePlayers.forEach((player, playerIndex) => {
@@ -399,6 +387,20 @@ function playYoutubeAt(index) {
   });
 }
 
+function pauseYoutubePlayers() {
+  window.clearTimeout(youtubeStartGuard);
+  youtubePlayers.forEach((player) => {
+    if (player && typeof player.pauseVideo === "function") {
+      player.pauseVideo();
+    }
+  });
+}
+
+function scheduleYoutubePlayback(index, delay = 0) {
+  window.clearTimeout(youtubePlaybackTimer);
+  youtubePlaybackTimer = window.setTimeout(() => playYoutubeAt(index), delay);
+}
+
 function goToNextYoutubeVideo() {
   if (!youtubePlayers.length) return;
   const nextIndex = (getActiveYoutubeIndex() + 1) % youtubePlayers.length;
@@ -410,12 +412,16 @@ function goToYoutubeIndex(index) {
   const nextIndex = (index + total) % total;
 
   if (youtubeSwiper) {
-    youtubeSwiper.slideTo(nextIndex);
+    if (youtubeSwiper.params.loop && typeof youtubeSwiper.slideToLoop === "function") {
+      youtubeSwiper.slideToLoop(nextIndex);
+    } else {
+      youtubeSwiper.slideTo(nextIndex);
+    }
   } else if (nativeVideoCarousel) {
     nativeVideoCarousel.goTo(nextIndex);
   }
 
-  window.setTimeout(() => playYoutubeAt(nextIndex), 500);
+  scheduleYoutubePlayback(nextIndex, youtubeSwiper ? youtubeSwiper.params.speed + 80 : 160);
 }
 
 function getActiveYoutubeIndex() {
@@ -446,7 +452,7 @@ function initYoutubePlayers() {
       events: {
         onReady(event) {
           event.target.mute();
-          if (index === 0 && !prefersReducedMotion) {
+          if (index === getActiveYoutubeIndex() && !prefersReducedMotion) {
             event.target.playVideo();
           }
         },
@@ -575,8 +581,10 @@ window.__mobileStaticTest = {
   youtubePlayerVars
 };
 
-if (window.matchMedia("(min-width: 768px)").matches) {
-  nativeVideoCarousel = initDesktopYoutubeCardCarousel(playYoutubeAt);
+const isDesktopYoutubeCarousel = window.matchMedia("(min-width: 768px)").matches;
+
+if (isDesktopYoutubeCarousel) {
+  nativeVideoCarousel = initDesktopThreeSlotYoutubeCarousel();
 } else if (typeof Swiper !== "undefined") {
   youtubeSwiper = new Swiper(".youtube-swiper", {
     slidesPerView: 1,
@@ -598,8 +606,16 @@ if (window.matchMedia("(min-width: 768px)").matches) {
       }
     },
     on: {
-      slideChange(swiper) {
+      slideChangeTransitionStart() {
+        pauseYoutubePlayers();
+      },
+      slideChangeTransitionEnd(swiper) {
         playYoutubeAt(typeof swiper.realIndex === "number" ? swiper.realIndex : swiper.activeIndex);
+      },
+      slideChange(swiper) {
+        if (!window.matchMedia("(min-width: 768px)").matches) {
+          scheduleYoutubePlayback(typeof swiper.realIndex === "number" ? swiper.realIndex : swiper.activeIndex, 120);
+        }
       }
     }
   });

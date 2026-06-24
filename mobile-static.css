@@ -1793,8 +1793,13 @@ h2 {
   }
 
   .youtube-section {
+    --youtube-top: calc(clamp(44px, 4.8vw, 64px) + clamp(32px, 3.15vw, 42px) + clamp(20px, 2vw, 26px));
+    --youtube-active-w: clamp(520px, 42.4vw, 868px);
+    --youtube-side-w: clamp(240px, 22vw, 450px);
+    --youtube-h: clamp(292px, 23.85vw, 488px);
+    --youtube-half-h: clamp(146px, 11.925vw, 244px);
     min-height: 0;
-    height: clamp(430px, 34.5vw, 500px);
+    height: auto;
     padding: clamp(44px, 4.8vw, 64px) 4.2% clamp(44px, 4.6vw, 58px);
     background: #fff;
     color: #050505;
@@ -1825,76 +1830,69 @@ h2 {
     inset: auto;
     z-index: 2;
     width: 100%;
-    height: clamp(280px, 21.8vw, 320px);
+    height: var(--youtube-h);
     margin: 0 auto;
     overflow: hidden;
     padding: 0;
     background: transparent;
   }
 
-  .youtube-swiper.is-card-carousel .swiper-wrapper {
+  .youtube-swiper .swiper-wrapper {
     position: relative;
-    display: block;
+    align-items: stretch;
     width: 100%;
     height: 100%;
-    transform: none !important;
   }
 
   .youtube-video-click-layer {
-    top: clamp(126px, 10vw, 136px);
-    left: 21%;
-    right: 21%;
-    bottom: clamp(45px, 3.6vw, 46px);
+    top: var(--youtube-top);
+    left: 50%;
+    right: auto;
+    bottom: auto;
     z-index: 5;
+    width: var(--youtube-active-w);
+    height: var(--youtube-h);
+    transform: translateX(-50%);
   }
 
   .youtube-swiper .swiper-slide {
-    position: relative;
-    width: 65.4%;
-    height: 100%;
-    flex: 0 0 65.4%;
-    overflow: hidden;
-    background: #b5b5b5;
-  }
-
-  .youtube-swiper.is-card-carousel .swiper-slide {
     position: absolute;
     top: 0;
     height: 100%;
     overflow: hidden;
     background: #b5b5b5;
     opacity: 1;
+    transform: none;
     pointer-events: none;
-    transition: left 520ms ease, right 520ms ease, width 520ms ease, opacity 300ms ease;
+    transition: left 520ms ease, width 520ms ease, opacity 260ms ease;
   }
 
-  .youtube-swiper.is-card-carousel .swiper-slide[data-card-slot="prev"] {
+  .youtube-swiper.is-three-slot .swiper-slide[data-slot="prev"] {
     left: 0;
-    right: auto;
-    width: 14.8%;
+    width: var(--youtube-side-w);
     z-index: 1;
   }
 
-  .youtube-swiper.is-card-carousel .swiper-slide[data-card-slot="active"] {
-    left: 17.1%;
-    right: auto;
-    width: 65.8%;
+  .youtube-swiper.is-three-slot .swiper-slide[data-slot="active"] {
+    left: 50%;
+    width: var(--youtube-active-w);
     z-index: 2;
+    transform: translateX(-50%);
     pointer-events: auto;
   }
 
-  .youtube-swiper.is-card-carousel .swiper-slide[data-card-slot="next"] {
-    left: 85.2%;
-    right: auto;
-    width: 14.8%;
+  .youtube-swiper.is-three-slot .swiper-slide[data-slot="next"] {
+    left: auto;
+    right: 0;
+    width: var(--youtube-side-w);
     z-index: 1;
   }
 
-  .youtube-swiper.is-card-carousel .swiper-slide[data-card-slot="hidden"] {
+  .youtube-swiper.is-three-slot .swiper-slide[data-slot="hidden"] {
     left: 100%;
     right: auto;
+    width: var(--youtube-side-w);
     opacity: 0;
-    pointer-events: none;
   }
 
   .youtube-player,
@@ -1922,7 +1920,7 @@ h2 {
 
   .youtube-nav {
     position: absolute;
-    top: calc(clamp(126px, 10vw, 136px) + clamp(140px, 10.9vw, 160px));
+    top: calc(var(--youtube-top) + var(--youtube-half-h) - 15px);
     z-index: 7;
     display: grid;
     place-items: center;
